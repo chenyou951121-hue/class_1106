@@ -1,7 +1,13 @@
-import { firebaseConfig } from "./firebase-config.js";
+import { firebaseConfig, firestoreDatabaseId } from "./firebase-config.js";
 
 const statusElement = document.getElementById("authStatus");
 const signInButton = document.getElementById("googleSignInButton");
+const googleGateSignInButton = document.getElementById("googleGateSignInButton");
+const lineGateSignInButton = document.getElementById("lineGateSignInButton");
+const signInButtons = [signInButton, googleGateSignInButton, lineGateSignInButton].filter(Boolean);
+const appRoot = document.getElementById("appRoot");
+const authGate = document.getElementById("authGate");
+const authGateMessage = document.getElementById("authGateMessage");
 const accountMenu = document.getElementById("accountMenu");
 const accountAvatar = document.getElementById("accountAvatar");
 const accountInitial = document.getElementById("accountInitial");
@@ -9,10 +15,21 @@ const accountName = document.getElementById("accountName");
 const signOutButton = document.getElementById("signOutButton");
 
 function setStatus(message) {
-  statusElement.textContent = message;
+  if (statusElement) statusElement.textContent = message;
+  if (authGateMessage && appRoot?.hidden) authGateMessage.textContent = message;
+}
+
+function setSignInButtonsDisabled(disabled) {
+  signInButtons.forEach((button) => {
+    button.disabled = disabled;
+  });
 }
 
 function showError(message) {
+  if (authGate && !authGate.hidden) {
+    authGateMessage.textContent = message;
+    return;
+  }
   if (typeof window.toast === "function") {
     window.toast(message);
   } else {
@@ -28,8 +45,13 @@ function hasFirebaseConfig(config) {
 }
 
 function renderUser(user) {
-  signInButton.hidden = Boolean(user);
-  accountMenu.hidden = !user;
+  const isAuthenticated = Boolean(user);
+  appRoot.hidden = !isAuthenticated;
+  authGate.hidden = isAuthenticated;
+  signInButtons.forEach((button) => {
+    button.hidden = isAuthenticated;
+  });
+  accountMenu.hidden = !isAuthenticated;
 
   if (!user) {
     accountAvatar.hidden = true;
@@ -66,43 +88,59 @@ function explainAuthError(error) {
     case "auth/unauthorized-domain":
       return "這個網站網域尚未加入 Firebase 授權網域。";
     case "auth/operation-not-allowed":
-      return "Firebase 尚未啟用 Google 登入。";
+      return "Firebase 尚未啟用這個登入方式。";
     case "auth/network-request-failed":
       return "網路連線失敗，請檢查網路後重試。";
     default:
-      return "Google 登入失敗，請稍後再試。";
+      return "登入失敗，請稍後再試。";
   }
 }
 
+function explainFirestoreError(error) {
+  console.error("Firestore user data error.", error);
+  if (error?.code === "permission-denied" || error?.code === "firestore/permission-denied") {
+    return "Firestore 安全規則尚未部署，或目前帳號沒有資料存取權。";
+  }
+  if (error?.code === "not-found" || error?.code === "firestore/not-found") {
+    return "找不到 daily-sequence 資料庫；請先建立 Enterprise 資料庫並部署規則。";
+  }
+  return "無法載入 Firestore 資料，請確認資料庫已建立且安全規則已部署。";
+}
+
 if (!hasFirebaseConfig(firebaseConfig)) {
-  signInButton.disabled = true;
-  signInButton.title = "請先設定 firebase-config.js";
-  setStatus("尚未設定 Firebase");
+  setSignInButtonsDisabled(true);
+  setStatus("登入服務尚未設定，請檢查 Firebase 設定。");
 } else if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
-  signInButton.disabled = true;
-  signInButton.title = "Google 登入需要 HTTPS 或 localhost";
-  setStatus("請使用 HTTPS 開啟登入");
+  setSignInButtonsDisabled(true);
+  setStatus("登入需要 HTTPS 或 localhost。");
 } else {
   let firebaseModules;
   try {
     firebaseModules = await Promise.all([
-      import("https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js"),
-      import("https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js"),
+      import("https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore-pipelines.js"),
+      import("./firestore-data.js"),
     ]);
   } catch (error) {
     console.error("Could not load Firebase SDK.", error);
-    signInButton.disabled = true;
-    signInButton.title = "無法載入 Firebase，請檢查網路連線";
-    setStatus("登入服務載入失敗");
+    setSignInButtonsDisabled(true);
+    setStatus("無法載入 Firebase 服務，請檢查網路連線。");
   }
 
   if (firebaseModules) {
-    const [{ initializeApp }, { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence }] = firebaseModules;
+    const [appSdk, authSdk, firestoreSdk, pipelinesSdk, { createFirestoreStore }] = firebaseModules;
+    const { initializeApp } = appSdk;
+    const { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } = authSdk;
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
+    const db = firestoreSdk.getFirestore(app, firestoreDatabaseId);
+    const googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: "select_account" });
+    const lineProvider = new OAuthProvider("oidc.line");
+    lineProvider.addScope("profile");
 
     try {
       await setPersistence(auth, browserLocalPersistence);
@@ -110,30 +148,61 @@ if (!hasFirebaseConfig(firebaseConfig)) {
       console.warn("Could not set local Firebase Auth persistence.", error);
     }
 
-    onAuthStateChanged(auth, renderUser, (error) => {
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        window.firestoreStore = null;
+        renderUser(null);
+        return;
+      }
+
+      window.firestoreStore = null;
+      renderUser(null);
+      setStatus("正在載入你的 Firestore 資料…");
+      try {
+        const store = createFirestoreStore({
+          db,
+          firestore: firestoreSdk,
+          pipelines: pipelinesSdk,
+          uid: user.uid,
+        });
+        const userData = await store.load(window.collectInitialFirestoreData);
+        window.firestoreStore = store;
+        window.renderFirestoreData(userData);
+        renderUser(user);
+      } catch (error) {
+        window.firestoreStore = null;
+        renderUser(null);
+        setStatus(explainFirestoreError(error));
+      }
+    }, (error) => {
       console.error("Firebase Auth state error.", error);
+      window.firestoreStore = null;
+      renderUser(null);
       setStatus("無法載入登入狀態");
     });
 
-    signInButton.addEventListener("click", async () => {
-      signInButton.disabled = true;
-      setStatus("正在開啟 Google 登入…");
+    async function signIn(provider, providerName) {
+      setSignInButtonsDisabled(true);
+      setStatus(`正在開啟 ${providerName} 登入…`);
       try {
         await signInWithPopup(auth, provider);
       } catch (error) {
-        console.error("Google sign-in failed.", error);
+        console.error(`${providerName} sign-in failed.`, error);
         showError(explainAuthError(error));
-        if (!auth.currentUser) setStatus("尚未登入");
       } finally {
-        signInButton.disabled = false;
+        setSignInButtonsDisabled(false);
       }
-    });
+    }
+
+    signInButton?.addEventListener("click", () => signIn(googleProvider, "Google"));
+    googleGateSignInButton?.addEventListener("click", () => signIn(googleProvider, "Google"));
+    lineGateSignInButton?.addEventListener("click", () => signIn(lineProvider, "LINE"));
 
     signOutButton.addEventListener("click", async () => {
       signOutButton.disabled = true;
       try {
         await signOut(auth);
-        showError("已登出 Google 帳號。");
+        showError("已登出。");
       } catch (error) {
         console.error("Firebase sign-out failed.", error);
         showError("登出失敗，請稍後再試。");

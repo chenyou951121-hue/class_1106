@@ -1,0 +1,182 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Assumed data model:
+    // users/{uid}: createdAt and updatedAt only (parent marker, no PII).
+    // users/{uid}/events/{eventId}: title, category, date, startTime, endTime,
+    //   reminder, done, createdAt, updatedAt.
+    // users/{uid}/goals/{goalId}: title, description, deadline, weeklyHours,
+    //   progress, createdAt, updatedAt.
+    // users/{uid}/settings/preferences: notification and goal review preferences.
+    // Every path is scoped to the signed-in user's Firebase UID.
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasUserProfile(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    // Ownership is enforced by the path. The schema intentionally contains no
+    // ownerUid field, so a client cannot reassign a document to another user.
+    function uidUnchanged() {
+      return !('ownerUid' in request.resource.data) ||
+        request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('ownerUid' in request.resource.data) ||
+        request.resource.data.ownerUid == resource.data.ownerUid;
+    }
+
+    function onlyFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function hasFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function validText(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+
+    function validOptionalText(value, maxLength) {
+      return value is string && value.size() <= maxLength;
+    }
+
+    function validDate(value) {
+      return value is string && value.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function validTime(value) {
+      return value is string && value.matches('^([01]\\d|2[0-3]):[0-5]\\d$');
+    }
+
+    function validEvent(data) {
+      return hasFields(data, [
+          'title', 'category', 'date', 'startTime', 'endTime', 'reminder',
+          'done', 'createdAt', 'updatedAt'
+        ]) &&
+        onlyFields(data, [
+          'title', 'category', 'date', 'startTime', 'endTime', 'reminder',
+          'done', 'createdAt', 'updatedAt'
+        ]) &&
+        validText(data.title, 120) &&
+        data.category in ['task', 'appointment', 'short_goal', 'habit'] &&
+        validDate(data.date) &&
+        validTime(data.startTime) &&
+        validTime(data.endTime) &&
+        data.reminder in ['line', 'none'] &&
+        data.done is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt == request.time;
+    }
+
+    function validGoal(data) {
+      return hasFields(data, [
+          'title', 'description', 'deadline', 'weeklyHours', 'progress',
+          'createdAt', 'updatedAt'
+        ]) &&
+        onlyFields(data, [
+          'title', 'description', 'deadline', 'weeklyHours', 'progress',
+          'createdAt', 'updatedAt'
+        ]) &&
+        validText(data.title, 120) &&
+        validOptionalText(data.description, 1000) &&
+        (data.deadline == '' || validDate(data.deadline)) &&
+        data.weeklyHours is number && data.weeklyHours >= 0 && data.weeklyHours <= 168 &&
+        data.progress is number && data.progress >= 0 && data.progress <= 100 &&
+        data.createdAt is timestamp &&
+        data.updatedAt == request.time;
+    }
+
+    function validPreferences(data) {
+      return hasFields(data, [
+          'lineNotifications', 'notificationWindow', 'repeatReminderHours',
+          'quietStart', 'quietEnd', 'resumeAfterQuiet', 'quickComplete',
+          'allowSnooze', 'defaultSnooze', 'goalReviewFrequency',
+          'progressSuggestions', 'createdAt', 'updatedAt'
+        ]) &&
+        onlyFields(data, [
+          'lineNotifications', 'notificationWindow', 'repeatReminderHours',
+          'quietStart', 'quietEnd', 'resumeAfterQuiet', 'quickComplete',
+          'allowSnooze', 'defaultSnooze', 'goalReviewFrequency',
+          'progressSuggestions', 'createdAt', 'updatedAt'
+        ]) &&
+        data.lineNotifications is bool &&
+        data.notificationWindow in ['per_item', 'all_day', 'weekdays'] &&
+        data.repeatReminderHours in [1, 2, 3] &&
+        validTime(data.quietStart) &&
+        validTime(data.quietEnd) &&
+        data.resumeAfterQuiet is bool &&
+        data.quickComplete is bool &&
+        data.allowSnooze is bool &&
+        data.defaultSnooze in ['30m', '1h', 'tomorrow'] &&
+        data.goalReviewFrequency in ['daily', 'weekly', 'monthly'] &&
+        data.progressSuggestions is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt == request.time;
+    }
+
+    function validUserProfile(data) {
+      return hasFields(data, ['createdAt', 'updatedAt']) &&
+        onlyFields(data, ['createdAt', 'updatedAt']) &&
+        data.createdAt is timestamp &&
+        data.updatedAt == request.time;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && uidUnchanged() &&
+        validUserProfile(request.resource.data) &&
+        request.resource.data.createdAt == request.time;
+      allow update: if isOwner(userId) && uidNotModified() &&
+        validUserProfile(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    match /users/{userId}/events/{eventId} {
+      allow read: if isOwner(userId) && hasUserProfile(userId);
+      allow create: if isOwner(userId) && hasUserProfile(userId) && uidUnchanged() &&
+        validEvent(request.resource.data) &&
+        request.resource.data.createdAt == request.time;
+      allow update: if isOwner(userId) && hasUserProfile(userId) && uidNotModified() &&
+        validEvent(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(userId) && hasUserProfile(userId);
+    }
+
+    match /users/{userId}/goals/{goalId} {
+      allow read: if isOwner(userId) && hasUserProfile(userId);
+      allow create: if isOwner(userId) && hasUserProfile(userId) && uidUnchanged() &&
+        validGoal(request.resource.data) &&
+        request.resource.data.createdAt == request.time;
+      allow update: if isOwner(userId) && hasUserProfile(userId) && uidNotModified() &&
+        validGoal(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(userId) && hasUserProfile(userId);
+    }
+
+    match /users/{userId}/settings/preferences {
+      allow read: if isOwner(userId) && hasUserProfile(userId);
+      allow create: if isOwner(userId) && hasUserProfile(userId) && uidUnchanged() &&
+        validPreferences(request.resource.data) &&
+        request.resource.data.createdAt == request.time;
+      allow update: if isOwner(userId) && hasUserProfile(userId) && uidNotModified() &&
+        validPreferences(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

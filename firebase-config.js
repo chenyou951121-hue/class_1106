@@ -8,3 +8,5 @@ export const firebaseConfig = {
   messagingSenderId: "688040425454",
   appId: "1:688040425454:web:d3f40e526ccb28bb1800ff",
 };
+
+export const firestoreDatabaseId = "daily-sequence";
