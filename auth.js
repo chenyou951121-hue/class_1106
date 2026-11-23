@@ -128,13 +128,16 @@ function explainAuthError(error) {
 
 function explainFirestoreError(error) {
   console.error("Firestore user data error.", error);
+  const detail = String(error?.code || error?.message || error?.name || "未知錯誤")
+    .replace(/\s+/g, " ")
+    .slice(0, 160);
   if (error?.code === "permission-denied" || error?.code === "firestore/permission-denied") {
-    return "Firestore 安全規則尚未部署，或目前帳號沒有資料存取權。";
+    return `Firestore 拒絕這個帳號存取資料（${detail}）。`;
   }
   if (error?.code === "not-found" || error?.code === "firestore/not-found") {
-    return "找不到 daily-sequence 資料庫；請先建立 Enterprise 資料庫並部署規則。";
+    return `找不到 Firestore 資料庫或文件（${detail}）。`;
   }
-  return "無法載入 Firestore 資料，請確認資料庫已建立且安全規則已部署。";
+  return `無法載入 Firestore 資料（${detail}）。`;
 }
 
 if (!hasFirebaseConfig(firebaseConfig)) {
