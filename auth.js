@@ -154,6 +154,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js"),
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js"),
       import("./firestore-data.js?v=2026-11-23-1"),
+      import("./taiwan-market.js?v=2026-11-23-2"),
     ]);
   } catch (error) {
     console.error("Could not load Firebase SDK.", error);
@@ -162,7 +163,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
   }
 
   if (firebaseModules) {
-    const [appSdk, authSdk, firestoreSdk, { createFirestoreStore }] = firebaseModules;
+    const [appSdk, authSdk, firestoreSdk, { createFirestoreStore }, { initTaiwanMarketBoard }] = firebaseModules;
     const { initializeApp } = appSdk;
     const { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } = authSdk;
 
@@ -200,6 +201,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
         window.firestoreStore = store;
         window.renderFirestoreData(userData);
         renderUser(user);
+        initTaiwanMarketBoard();
       } catch (error) {
         window.firestoreStore = null;
         showSignedInFirestoreError(user, error);
