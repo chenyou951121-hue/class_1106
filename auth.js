@@ -7,7 +7,12 @@ const lineGateSignInButton = document.getElementById("lineGateSignInButton");
 const signInButtons = [signInButton, googleGateSignInButton, lineGateSignInButton].filter(Boolean);
 const appRoot = document.getElementById("appRoot");
 const authGate = document.getElementById("authGate");
+const authGateTitle = document.getElementById("authGateTitle");
+const authGateIntro = document.getElementById("authGateIntro");
 const authGateMessage = document.getElementById("authGateMessage");
+const authGateRecoveryActions = document.getElementById("authGateRecoveryActions");
+const authGateRetryButton = document.getElementById("authGateRetryButton");
+const authGateSignOutButton = document.getElementById("authGateSignOutButton");
 const accountMenu = document.getElementById("accountMenu");
 const accountAvatar = document.getElementById("accountAvatar");
 const accountInitial = document.getElementById("accountInitial");
@@ -54,6 +59,10 @@ function renderUser(user) {
   accountMenu.hidden = !isAuthenticated;
 
   if (!user) {
+    authGateTitle.textContent = "登入後開始使用日序";
+    authGateIntro.hidden = false;
+    authGateRecoveryActions.hidden = true;
+    authGateMessage.classList.remove("auth-gate-error");
     accountAvatar.hidden = true;
     accountInitial.hidden = false;
     accountName.textContent = "";
@@ -77,6 +86,27 @@ function renderUser(user) {
     accountAvatar.hidden = true;
     accountInitial.hidden = false;
   }
+}
+
+function showSignedInFirestoreError(user, error) {
+  const providerIds = user.providerData?.map(({ providerId }) => providerId) || [];
+  const providerName = providerIds.includes("google.com")
+    ? "Google"
+    : providerIds.includes("oidc.line")
+      ? "LINE"
+      : "帳號";
+
+  appRoot.hidden = true;
+  authGate.hidden = false;
+  accountMenu.hidden = true;
+  signInButtons.forEach((button) => {
+    button.hidden = true;
+  });
+  authGateTitle.textContent = `${providerName} 登入成功，但資料無法載入`;
+  authGateIntro.hidden = true;
+  authGateMessage.classList.add("auth-gate-error");
+  authGateMessage.textContent = explainFirestoreError(error);
+  authGateRecoveryActions.hidden = false;
 }
 
 function explainAuthError(error) {
@@ -171,8 +201,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
         renderUser(user);
       } catch (error) {
         window.firestoreStore = null;
-        renderUser(null);
-        setStatus(explainFirestoreError(error));
+        showSignedInFirestoreError(user, error);
       }
     }, (error) => {
       console.error("Firebase Auth state error.", error);
@@ -198,8 +227,8 @@ if (!hasFirebaseConfig(firebaseConfig)) {
     googleGateSignInButton?.addEventListener("click", () => signIn(googleProvider, "Google"));
     lineGateSignInButton?.addEventListener("click", () => signIn(lineProvider, "LINE"));
 
-    signOutButton.addEventListener("click", async () => {
-      signOutButton.disabled = true;
+    async function handleSignOut(button) {
+      button.disabled = true;
       try {
         await signOut(auth);
         showError("已登出。");
@@ -207,8 +236,12 @@ if (!hasFirebaseConfig(firebaseConfig)) {
         console.error("Firebase sign-out failed.", error);
         showError("登出失敗，請稍後再試。");
       } finally {
-        signOutButton.disabled = false;
+        button.disabled = false;
       }
-    });
+    }
+
+    signOutButton?.addEventListener("click", () => handleSignOut(signOutButton));
+    authGateSignOutButton?.addEventListener("click", () => handleSignOut(authGateSignOutButton));
+    authGateRetryButton?.addEventListener("click", () => location.reload());
   }
 }

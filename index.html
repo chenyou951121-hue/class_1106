@@ -20,7 +20,9 @@
 .auth-gate-card h1{margin:0 0 8px;font-size:23px;letter-spacing:-.03em}
 .auth-gate-card p{margin:0;color:var(--muted);font-size:14px}
 .auth-gate-card #authGateMessage{min-height:22px;margin-top:12px;font-size:13px;color:var(--green)}
+.auth-gate-card #authGateMessage.auth-gate-error{color:#a34230}
 .auth-gate-actions{display:grid;gap:10px;margin-top:20px}
+#authGateRecoveryActions[hidden]{display:none!important}
 .auth-gate-login{width:100%;padding:11px 18px;border:1px solid #dfe3dc;border-radius:11px;background:#fff;color:#3c443c;font-weight:650}
 .auth-gate-line{border-color:#06c755;background:#06c755;color:#fff}
 .auth-gate-login:hover:not(:disabled){filter:brightness(.97)}
@@ -33,11 +35,15 @@
   <div class="auth-gate-card">
     <div class="auth-gate-mark" aria-hidden="true">日</div>
     <h1 id="authGateTitle">登入後開始使用日序</h1>
-    <p>請先使用 Google 或 LINE 帳號登入，才能查看和使用行程與目標。</p>
+    <p id="authGateIntro">請先使用 Google 或 LINE 帳號登入，才能查看和使用行程與目標。</p>
     <p id="authGateMessage" role="status">正在確認登入狀態…</p>
     <div class="auth-gate-actions">
       <button class="auth-gate-login" id="googleGateSignInButton" type="button">使用 Google 登入</button>
       <button class="auth-gate-login auth-gate-line" id="lineGateSignInButton" type="button">使用 LINE 登入</button>
+    </div>
+    <div class="auth-gate-actions" id="authGateRecoveryActions" hidden>
+      <button class="auth-gate-login" id="authGateRetryButton" type="button">重新載入</button>
+      <button class="auth-gate-login" id="authGateSignOutButton" type="button">登出帳號</button>
     </div>
   </div>
 </section>
