@@ -1,15 +1,17 @@
-export function createFirestoreStore({ db, firestore, pipelines, uid }) {
+export function createFirestoreStore({ db, firestore, uid }) {
   const {
     addDoc,
     collection,
     deleteDoc,
     doc,
     getDoc,
+    getDocs,
+    orderBy,
+    query,
     serverTimestamp,
     setDoc,
     updateDoc,
   } = firestore;
-  const { execute, field } = pipelines;
   const userPath = `users/${uid}`;
   const settingsRef = doc(db, userPath, "settings", "preferences");
   let state = { events: [], goals: [], preferences: null };
@@ -18,12 +20,15 @@ export function createFirestoreStore({ db, firestore, pipelines, uid }) {
     return `${userPath}/${name}`;
   }
 
-  async function readCollection(name, orderings) {
-    const query = db.pipeline().collection(collectionPath(name)).sort(...orderings);
-    const snapshot = await execute(query);
-    return snapshot.results.map((result) => ({
-      id: result.ref.id,
-      ...result.data(),
+  async function readCollection(name, orderFields) {
+    const collectionQuery = query(
+      collection(db, collectionPath(name)),
+      ...orderFields.map((fieldName) => orderBy(fieldName)),
+    );
+    const snapshot = await getDocs(collectionQuery);
+    return snapshot.docs.map((document) => ({
+      id: document.id,
+      ...document.data(),
     }));
   }
 
@@ -80,15 +85,8 @@ export function createFirestoreStore({ db, firestore, pipelines, uid }) {
   async function load(initialData) {
     await seedOnce(initialData);
     const [events, goals, preferencesSnapshot] = await Promise.all([
-      readCollection("events", [
-        field("date").ascending(),
-        field("startTime").ascending(),
-        field("__name__").ascending(),
-      ]),
-      readCollection("goals", [
-        field("title").ascending(),
-        field("__name__").ascending(),
-      ]),
+      readCollection("events", ["date", "startTime"]),
+      readCollection("goals", ["title"]),
       getDoc(settingsRef),
     ]);
 

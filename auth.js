@@ -153,8 +153,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js"),
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js"),
-      import("https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore-pipelines.js"),
-      import("./firestore-data.js"),
+      import("./firestore-data.js?v=2026-11-23-1"),
     ]);
   } catch (error) {
     console.error("Could not load Firebase SDK.", error);
@@ -163,7 +162,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
   }
 
   if (firebaseModules) {
-    const [appSdk, authSdk, firestoreSdk, pipelinesSdk, { createFirestoreStore }] = firebaseModules;
+    const [appSdk, authSdk, firestoreSdk, { createFirestoreStore }] = firebaseModules;
     const { initializeApp } = appSdk;
     const { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } = authSdk;
 
@@ -195,7 +194,6 @@ if (!hasFirebaseConfig(firebaseConfig)) {
         const store = createFirestoreStore({
           db,
           firestore: firestoreSdk,
-          pipelines: pipelinesSdk,
           uid: user.uid,
         });
         const userData = await store.load(window.collectInitialFirestoreData);
