@@ -1,6 +1,6 @@
 .market-board {
   margin: 0 0 23px;
-  padding: 14px 18px 8px;
+  padding: 14px 18px 16px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -13,7 +13,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 3px;
+  margin-bottom: 12px;
 }
 
 .market-board-kicker {
@@ -36,19 +36,94 @@
   white-space: nowrap;
 }
 
-.market-board .tradingview-widget-container,
-.market-board .tradingview-widget-container__widget {
-  width: 100%;
-  min-height: 50px;
+.market-quotes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-quote {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #edf0ea;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color .15s, transform .15s;
+}
+
+.market-quote:hover {
+  transform: translateY(-1px);
+  border-color: #cbd8c8;
+}
+
+.market-quote-name {
+  overflow: hidden;
+  color: #7e867d;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-quote-price {
+  overflow: hidden;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-quote-change {
+  overflow: hidden;
+  color: #7e867d;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-quote.is-up .market-quote-change {
+  color: #cb4e47;
+}
+
+.market-quote.is-down .market-quote-change {
+  color: #378167;
+}
+
+.market-quote-placeholder {
+  grid-column: 1 / -1;
+  padding: 12px;
+  color: #858c84;
+  font-size: 12px;
+}
+
+@media (max-width: 780px) {
+  .market-quotes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 480px) {
   .market-board {
     margin-bottom: 19px;
-    padding: 12px 13px 6px;
+    padding: 12px 13px;
   }
 
   .market-board-note {
+    max-width: 54%;
+    overflow: hidden;
     font-size: 9px;
+    text-overflow: ellipsis;
+  }
+
+  .market-quotes {
+    gap: 7px;
+  }
+
+  .market-quote {
+    padding: 9px 10px;
   }
 }
