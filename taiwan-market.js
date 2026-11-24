@@ -4,6 +4,7 @@ const marketSymbols = [
   { exchangeCode: "tse_2317.tw", code: "2317", name: "鴻海", tvSymbol: "TWSE:2317" },
   { exchangeCode: "tse_2454.tw", code: "2454", name: "聯發科", tvSymbol: "TWSE:2454" },
 ];
+const marketDataUrl = "https://daily-sequence-market.chenyou951121.workers.dev/";
 
 function parseNumber(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -66,11 +67,8 @@ function renderQuotes(container, quotes) {
 }
 
 async function updateMarketQuotes(container, note) {
-  const exchangeCodes = marketSymbols.map(({ exchangeCode }) => exchangeCode).join("|");
-  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(exchangeCodes)}&json=1&delay=0`;
-
   try {
-    const response = await fetch(url, { cache: "no-store" });
+    const response = await fetch(marketDataUrl, { cache: "no-store" });
     if (!response.ok) throw new Error(`行情服務回應 ${response.status}`);
 
     const result = await response.json();
