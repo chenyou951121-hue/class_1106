@@ -154,7 +154,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js"),
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js"),
       import("./firestore-data.js?v=2026-11-23-1"),
-      import("./taiwan-market.js?v=2026-11-24-1"),
+      import("./taiwan-market.js?v=2026-11-24-2"),
     ]);
   } catch (error) {
     console.error("Could not load Firebase SDK.", error);
