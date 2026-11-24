@@ -17,6 +17,7 @@ const accountMenu = document.getElementById("accountMenu");
 const accountAvatar = document.getElementById("accountAvatar");
 const accountInitial = document.getElementById("accountInitial");
 const accountName = document.getElementById("accountName");
+const greetingName = document.getElementById("greetingName");
 const signOutButton = document.getElementById("signOutButton");
 
 function setStatus(message) {
@@ -59,6 +60,7 @@ function renderUser(user) {
   accountMenu.hidden = !isAuthenticated;
 
   if (!user) {
+    if (greetingName) greetingName.textContent = "使用者";
     authGateTitle.textContent = "登入後開始使用日序";
     authGateIntro.hidden = false;
     authGateRecoveryActions.hidden = true;
@@ -69,6 +71,12 @@ function renderUser(user) {
     setStatus("尚未登入");
     return;
   }
+
+  const profileName = user.displayName?.trim()
+    || user.providerData?.find(({ providerId }) => providerId === "oidc.line")?.displayName?.trim()
+    || user.providerData?.find(({ providerId }) => providerId === "google.com")?.displayName?.trim()
+    || "使用者";
+  if (greetingName) greetingName.textContent = profileName;
 
   const label = user.displayName || user.email || "Google 使用者";
   accountName.textContent = label;
