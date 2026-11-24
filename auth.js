@@ -20,6 +20,14 @@ const accountName = document.getElementById("accountName");
 const greetingName = document.getElementById("greetingName");
 const signOutButton = document.getElementById("signOutButton");
 
+function isLineInAppBrowser() {
+  return /Line\/[\d.]+/i.test(navigator.userAgent);
+}
+
+function lineBrowserLoginGuidance() {
+  return "LINE 內建瀏覽器無法保留登入狀態。請點右上角「⋯」，選「使用預設瀏覽器開啟」，再用 Google 或 LINE 登入。";
+}
+
 function setStatus(message) {
   if (statusElement) statusElement.textContent = message;
   if (authGateMessage && appRoot?.hidden) authGateMessage.textContent = message;
@@ -68,7 +76,7 @@ function renderUser(user) {
     accountAvatar.hidden = true;
     accountInitial.hidden = false;
     accountName.textContent = "";
-    setStatus("尚未登入");
+    setStatus(isLineInAppBrowser() ? lineBrowserLoginGuidance() : "尚未登入");
     return;
   }
 
@@ -118,6 +126,11 @@ function showSignedInFirestoreError(user, error) {
 }
 
 function explainAuthError(error) {
+  const detail = String(error?.message || "");
+  if (/missing initial state|sessionStorage/i.test(detail)) {
+    return "登入狀態在瀏覽器切換時遺失。請在手機 Safari 或 Chrome 直接開啟網站，再重新登入。";
+  }
+
   switch (error?.code) {
     case "auth/popup-closed-by-user":
       return "已關閉 Google 登入視窗。";
@@ -222,6 +235,11 @@ if (!hasFirebaseConfig(firebaseConfig)) {
     });
 
     async function signIn(provider, providerName) {
+      if (isLineInAppBrowser()) {
+        showError(lineBrowserLoginGuidance());
+        return;
+      }
+
       setSignInButtonsDisabled(true);
       setStatus(`正在開啟 ${providerName} 登入…`);
       try {
