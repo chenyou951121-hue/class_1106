@@ -24,6 +24,11 @@ function isLineInAppBrowser() {
   return /Line\/[\d.]+/i.test(navigator.userAgent);
 }
 
+function isMobileBrowser() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 function lineBrowserLoginGuidance() {
   return "LINE 內建瀏覽器無法保留登入狀態。請點右上角「⋯」，選「使用預設瀏覽器開啟」，再用 Google 或 LINE 登入。";
 }
@@ -186,7 +191,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
   if (firebaseModules) {
     const [appSdk, authSdk, firestoreSdk, { createFirestoreStore }, { initTaiwanMarketBoard }] = firebaseModules;
     const { initializeApp } = appSdk;
-    const { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } = authSdk;
+    const { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } = authSdk;
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -202,10 +207,22 @@ if (!hasFirebaseConfig(firebaseConfig)) {
       console.warn("Could not set local Firebase Auth persistence.", error);
     }
 
+    let redirectResultError = null;
+    try {
+      await getRedirectResult(auth);
+    } catch (error) {
+      console.error("Could not complete Firebase Auth redirect.", error);
+      redirectResultError = error;
+    }
+
     onAuthStateChanged(auth, async (user) => {
       if (!user) {
         window.firestoreStore = null;
         renderUser(null);
+        if (redirectResultError) {
+          showError(explainAuthError(redirectResultError));
+          redirectResultError = null;
+        }
         return;
       }
 
@@ -243,7 +260,11 @@ if (!hasFirebaseConfig(firebaseConfig)) {
       setSignInButtonsDisabled(true);
       setStatus(`正在開啟 ${providerName} 登入…`);
       try {
-        await signInWithPopup(auth, provider);
+        if (isMobileBrowser()) {
+          await signInWithRedirect(auth, provider);
+        } else {
+          await signInWithPopup(auth, provider);
+        }
       } catch (error) {
         console.error(`${providerName} sign-in failed.`, error);
         showError(explainAuthError(error));
