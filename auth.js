@@ -24,11 +24,6 @@ function isLineInAppBrowser() {
   return /Line\/[\d.]+/i.test(navigator.userAgent);
 }
 
-function isMobileBrowser() {
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
-    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-}
-
 function lineBrowserLoginGuidance() {
   return "LINE 內建瀏覽器無法保留登入狀態。請點右上角「⋯」，選「使用預設瀏覽器開啟」，再用 Google 或 LINE 登入。";
 }
@@ -133,7 +128,7 @@ function showSignedInFirestoreError(user, error) {
 function explainAuthError(error) {
   const detail = String(error?.message || "");
   if (/missing initial state|sessionStorage/i.test(detail)) {
-    return "登入狀態在瀏覽器切換時遺失。請在手機 Safari 或 Chrome 直接開啟網站，再重新登入。";
+    return "瀏覽器中斷了先前的登入流程。請回到日序重新點選登入，並允許瀏覽器開啟登入視窗。";
   }
 
   switch (error?.code) {
@@ -191,7 +186,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
   if (firebaseModules) {
     const [appSdk, authSdk, firestoreSdk, { createFirestoreStore }, { initTaiwanMarketBoard }] = firebaseModules;
     const { initializeApp } = appSdk;
-    const { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } = authSdk;
+    const { getAuth, GoogleAuthProvider, OAuthProvider, signInWithPopup, getRedirectResult, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } = authSdk;
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -260,11 +255,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
       setSignInButtonsDisabled(true);
       setStatus(`正在開啟 ${providerName} 登入…`);
       try {
-        if (isMobileBrowser()) {
-          await signInWithRedirect(auth, provider);
-        } else {
-          await signInWithPopup(auth, provider);
-        }
+        await signInWithPopup(auth, provider);
       } catch (error) {
         console.error(`${providerName} sign-in failed.`, error);
         showError(explainAuthError(error));
