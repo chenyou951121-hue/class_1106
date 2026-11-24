@@ -1,5 +1,5 @@
 (function () {
-  const defaultDate = "2026-10-30";
+  const defaultDate = formatIsoDate(new Date());
   let selectedDate = defaultDate;
   let cachedData = null;
 
@@ -89,24 +89,6 @@
   }
 
   function collectInitialData() {
-    const events = [...document.querySelectorAll("#timeline .event")].map((element, index) => {
-      const title = element.querySelector(".event-title")?.textContent.trim() || "未命名項目";
-      const meta = element.querySelector(".event-meta")?.textContent || "";
-      const time = meta.match(/(\d{2}:\d{2})\s*[–-]\s*(\d{2}:\d{2})/);
-      const category = meta.split("・").at(-1) || "任務";
-      const rowLabel = element.closest(".time-row")?.querySelector(".time-label")?.textContent.trim();
-      return {
-        id: `demo-event-${String(index + 1).padStart(3, "0")}`,
-        title,
-        category: mapCategory(category),
-        date: defaultDate,
-        startTime: time?.[1] || rowLabel || "09:00",
-        endTime: time?.[2] || rowLabel || "10:00",
-        reminder: "none",
-        done: element.classList.contains("done"),
-      };
-    });
-
     const goals = [...document.querySelectorAll("#goalGrid .goal-card")].map((card, index) => {
       const title = card.querySelector("h3")?.textContent.trim() || "未命名目標";
       const description = card.querySelector("p")?.textContent.trim() || "";
@@ -124,7 +106,7 @@
       };
     });
 
-    return { events, goals, preferences: readPreferencesFromForm() };
+    return { events: [], goals, preferences: readPreferencesFromForm() };
   }
 
   function formatIsoDate(date) {
@@ -142,7 +124,8 @@
   function setSelectedDate(isoDate) {
     selectedDate = isoDate;
     const dateLabel = document.getElementById("dateLabel");
-    if (dateLabel) dateLabel.textContent = `${formatDateLabel(isoDate)}・所選日期`;
+    const todayLabel = isoDate === formatIsoDate(new Date()) ? "・今天" : "・所選日期";
+    if (dateLabel) dateLabel.textContent = `${formatDateLabel(isoDate)}${todayLabel}`;
     const dayBanner = document.querySelector(".day-banner strong");
     if (dayBanner) dayBanner.textContent = formatDateLabel(isoDate);
     if (cachedData) renderData(cachedData);
@@ -351,6 +334,35 @@
     renderGoals(data);
     renderWeek(data);
     if (document.getElementById("calendar")?.classList.contains("monthmode")) renderMonth(data);
+    updateScheduleSummary(data);
+  }
+
+  function updateScheduleSummary(data) {
+    const dayEvents = data.events
+      .filter((item) => item.date === selectedDate)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const upcoming = dayEvents.find((item) => !item.done) || dayEvents[0];
+    const nextStat = document.querySelector(".summary .stat:nth-child(3)");
+    if (nextStat) {
+      nextStat.querySelector(".stat-value").textContent = upcoming?.startTime || "尚無行程";
+      nextStat.querySelector(".stat-note").textContent = upcoming?.title || "新增項目開始安排";
+    }
+
+    const weekStart = new Date(`${selectedDate}T00:00:00`);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const startDate = formatIsoDate(weekStart);
+    const endDate = formatIsoDate(weekEnd);
+    const weekEvents = data.events.filter((item) => item.date >= startDate && item.date <= endDate);
+    const completed = weekEvents.filter((item) => item.done).length;
+    const progress = weekEvents.length ? Math.round((completed / weekEvents.length) * 100) : 0;
+    const weekCard = document.querySelector(".week-card");
+    if (weekCard) {
+      weekCard.querySelector("p").textContent = `本週已完成 ${completed} / ${weekEvents.length} 項目`;
+      weekCard.querySelector(".progress span").style.width = `${progress}%`;
+      weekCard.querySelector(".week-foot strong").textContent = `${progress}%`;
+    }
   }
 
   function getStore() {

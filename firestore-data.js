@@ -26,7 +26,13 @@ export function createFirestoreStore({ db, firestore, uid }) {
       ...orderFields.map((fieldName) => orderBy(fieldName)),
     );
     const snapshot = await getDocs(collectionQuery);
-    return snapshot.docs.map((document) => ({
+    let documents = snapshot.docs;
+    if (name === "events") {
+      const demoEvents = documents.filter(({ id }) => /^demo-event-\d+$/.test(id));
+      await Promise.all(demoEvents.map((document) => deleteDoc(document.ref)));
+      documents = documents.filter(({ id }) => !/^demo-event-\d+$/.test(id));
+    }
+    return documents.map((document) => ({
       id: document.id,
       ...document.data(),
     }));
