@@ -14,6 +14,27 @@
     return [...document.querySelectorAll("#settings .setting-card")];
   }
 
+  function ensureGmailReminderSettingsCard() {
+    const grid = document.querySelector("#settings .settings-grid");
+    if (!grid || document.getElementById("gmailReminderSettingsCard")) return;
+    const card = document.createElement("section");
+    card.className = "setting-card";
+    card.id = "gmailReminderSettingsCard";
+    card.innerHTML = `
+      <h3>Gmail 每日代辦提醒</h3>
+      <p>每天在你設定的時間寄送尚未完成的今日代辦事項。</p>
+      <div class="field"><label for="gmailRecipient">通知寄送到登入的 Google 信箱</label><input id="gmailRecipient" type="email" autocomplete="email" placeholder="請用 Google 帳號登入" readonly></div>
+      <div class="switch-row"><span>啟用每日代辦郵件</span><input id="dailyTaskEmailEnabled" type="checkbox" class="switch" aria-label="啟用每日代辦郵件"></div>
+      <div class="field"><label for="dailyTaskEmailTime">寄送時間</label><input id="dailyTaskEmailTime" type="time" value="08:00"></div>
+      <p class="email-reminder-status" id="gmailReminderSetupStatus" aria-live="polite"></p>`;
+    grid.appendChild(card);
+    const style = document.createElement("style");
+    style.textContent = ".email-reminder-status{margin:10px 0 0!important;padding:9px 10px;border-radius:9px;background:#f7f5ec;color:#786b42!important;font-size:11px!important}.email-reminder-status.ready{background:#edf4ed;color:#426447!important}.goal-reminder-settings{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;padding:10px 0;border-top:1px solid #f0f1ed;font-size:12px}.goal-reminder-settings label{display:flex;align-items:center;gap:7px}.goal-reminder-settings input[type=time]{width:112px;padding:5px;border:1px solid #e1e5de;border-radius:8px;background:#fff}.goal-summary-empty,.goal-empty-state{margin:0;color:#798078;font-size:12px}.goal-empty-state{padding:18px;background:#fff;border:1px dashed #dfe3dc;border-radius:14px;grid-column:1/-1}";
+    document.head.appendChild(style);
+  }
+
+  ensureGmailReminderSettingsCard();
+
   function readPreferencesFromForm() {
     const cards = getSettingCards();
     const notificationWindow = cards[0]?.querySelector("select")?.selectedIndex ?? 0;
@@ -39,6 +60,9 @@
       defaultSnooze: snoozeText.includes("30") ? "30m" : snoozeText.includes("明天") ? "tomorrow" : "1h",
       goalReviewFrequency: reviewText.includes("每日") ? "daily" : reviewText.includes("每月") ? "monthly" : "weekly",
       progressSuggestions: card4Checks[0]?.checked ?? true,
+      gmailRecipient: document.getElementById("gmailRecipient")?.value.trim() || "",
+      dailyTaskEmailEnabled: document.getElementById("dailyTaskEmailEnabled")?.checked ?? false,
+      dailyTaskEmailTime: document.getElementById("dailyTaskEmailTime")?.value || "08:00",
     };
   }
 
@@ -79,7 +103,39 @@
       monthly: "每月",
     }[preferences.goalReviewFrequency]);
     setChecks(cards[3], [preferences.progressSuggestions]);
+    const recipient = document.getElementById("gmailRecipient");
+    if (recipient) recipient.value = preferences.gmailRecipient || "";
+    const dailyEnabled = document.getElementById("dailyTaskEmailEnabled");
+    if (dailyEnabled) dailyEnabled.checked = Boolean(preferences.dailyTaskEmailEnabled);
+    const dailyTime = document.getElementById("dailyTaskEmailTime");
+    if (dailyTime) dailyTime.value = preferences.dailyTaskEmailTime || "08:00";
   }
+
+  window.setGmailReminderRecipientDefault = (email) => {
+    const recipient = document.getElementById("gmailRecipient");
+    if (recipient) recipient.value = email;
+  };
+
+  window.setGmailReminderAccount = ({ email, hasGoogleAccount }) => {
+    const recipient = document.getElementById("gmailRecipient");
+    const enabled = document.getElementById("dailyTaskEmailEnabled");
+    if (recipient) recipient.value = hasGoogleAccount ? (email || "") : "";
+    if (enabled) {
+      enabled.disabled = !hasGoogleAccount;
+      if (!hasGoogleAccount) enabled.checked = false;
+    }
+    if (!hasGoogleAccount) {
+      window.setGmailReminderServiceStatus("Gmail 提醒需使用已驗證的 Google 帳號登入。", false);
+    }
+  };
+
+  window.setGmailReminderServiceStatus = (message, ready) => {
+    const status = document.getElementById("gmailReminderSetupStatus");
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle("ready", Boolean(ready));
+    window.gmailReminderServiceReady = Boolean(ready);
+  };
 
   function mapCategory(label) {
     if (label.includes("習慣")) return "habit";
@@ -89,24 +145,7 @@
   }
 
   function collectInitialData() {
-    const goals = [...document.querySelectorAll("#goalGrid .goal-card")].map((card, index) => {
-      const title = card.querySelector("h3")?.textContent.trim() || "未命名目標";
-      const description = card.querySelector("p")?.textContent.trim() || "";
-      const progressText = card.querySelector(".progress span")?.style.width || "0%";
-      const detailText = [...card.querySelectorAll(".goal-detail")].map((detail) => detail.textContent).join(" ");
-      const deadlineMatch = detailText.match(/期限\s*(\d{4})\/(\d{1,2})\/(\d{1,2})/);
-      const hoursMatch = detailText.match(/每週投入\s*(\d+(?:\.\d+)?)\s*小時/);
-      return {
-        id: `demo-goal-${String(index + 1).padStart(3, "0")}`,
-        title,
-        description,
-        deadline: deadlineMatch ? `${deadlineMatch[1]}-${deadlineMatch[2].padStart(2, "0")}-${deadlineMatch[3].padStart(2, "0")}` : "",
-        weeklyHours: hoursMatch ? Number(hoursMatch[1]) : 0,
-        progress: Number.parseFloat(progressText) || 0,
-      };
-    });
-
-    return { events: [], goals, preferences: readPreferencesFromForm() };
+    return { events: [], goals: [], preferences: readPreferencesFromForm() };
   }
 
   function formatIsoDate(date) {
@@ -201,6 +240,12 @@
   function renderGoals(data) {
     const grid = document.getElementById("goalGrid");
     grid.replaceChildren();
+    if (!data.goals.length) {
+      const empty = document.createElement("p");
+      empty.className = "goal-empty-state";
+      empty.textContent = "目前沒有長期目標。按右上角「新增目標」，建立你的第一個目標。";
+      grid.appendChild(empty);
+    }
     data.goals.forEach((item) => {
       const card = document.createElement("article");
       card.className = "goal-card";
@@ -242,8 +287,81 @@
       adjust.onclick = () => window.adjustGoal(adjust);
       detail2.append(hours, adjust);
       card.append(head, description, progress, detail, detail2);
+
+      const reminderSettings = document.createElement("div");
+      reminderSettings.className = "goal-reminder-settings";
+      const reminderLabel = document.createElement("label");
+      const reminderEnabled = document.createElement("input");
+      reminderEnabled.type = "checkbox";
+      reminderEnabled.checked = Boolean(item.emailReminderEnabled);
+      reminderEnabled.setAttribute("aria-label", `啟用${item.title}的 Gmail 提醒`);
+      const reminderText = document.createElement("span");
+      reminderText.textContent = "每日 Gmail 提醒";
+      reminderLabel.append(reminderEnabled, reminderText);
+      const reminderTime = document.createElement("input");
+      reminderTime.type = "time";
+      reminderTime.value = item.emailReminderTime || "09:00";
+      reminderTime.setAttribute("aria-label", `${item.title} 的 Gmail 提醒時間`);
+      reminderEnabled.addEventListener("change", async () => {
+        try {
+          renderData(await getStore().updateGoal(item.id, { emailReminderEnabled: reminderEnabled.checked }));
+          window.toast(reminderEnabled.checked ? "已啟用目標 Gmail 提醒" : "已關閉目標 Gmail 提醒");
+        } catch (error) {
+          showSaveError(error);
+        }
+      });
+      reminderTime.addEventListener("change", async () => {
+        try {
+          renderData(await getStore().updateGoal(item.id, { emailReminderTime: reminderTime.value || "09:00" }));
+          window.toast("已儲存目標提醒時間");
+        } catch (error) {
+          showSaveError(error);
+        }
+      });
+      reminderSettings.append(reminderLabel, reminderTime);
+      card.appendChild(reminderSettings);
       grid.appendChild(card);
     });
+
+    const summaryPanel = document.querySelector("#home .sidecol .panel");
+    if (summaryPanel) {
+      const panelHead = summaryPanel.querySelector(".panel-head");
+      summaryPanel.replaceChildren(panelHead);
+      if (!data.goals.length) {
+        const empty = document.createElement("p");
+        empty.className = "goal-summary-empty";
+        empty.textContent = "目前沒有長期目標，新增後會顯示在這裡。";
+        summaryPanel.appendChild(empty);
+      } else {
+        data.goals.slice(0, 2).forEach((item) => {
+          const goal = document.createElement("div");
+          goal.className = "goal";
+          const top = document.createElement("div");
+          top.className = "goal-top";
+          const name = document.createElement("span");
+          name.className = "goal-name";
+          name.textContent = item.title;
+          const deadline = document.createElement("span");
+          deadline.className = "goal-date";
+          deadline.textContent = item.deadline || "持續進行";
+          top.append(name, deadline);
+          const bar = document.createElement("div");
+          bar.className = "progress";
+          const fill = document.createElement("span");
+          fill.style.width = `${item.progress}%`;
+          bar.appendChild(fill);
+          const meta = document.createElement("div");
+          meta.className = "goal-meta";
+          const progressLabel = document.createElement("span");
+          progressLabel.textContent = `進度 ${item.progress}%`;
+          const hoursLabel = document.createElement("span");
+          hoursLabel.textContent = `每週投入 ${item.weeklyHours} 小時`;
+          meta.append(progressLabel, hoursLabel);
+          goal.append(top, bar, meta);
+          summaryPanel.appendChild(goal);
+        });
+      }
+    }
   }
 
   function renderWeek(data) {
@@ -384,6 +502,10 @@
       const hours = content.querySelector('input[type="number"]');
       if (deadline) deadline.id = "goalDeadline";
       if (hours) hours.id = "goalHours";
+      const reminder = document.createElement("div");
+      reminder.className = "goal-reminder-settings";
+      reminder.innerHTML = '<label><input id="goalEmailReminderEnabled" type="checkbox"><span>每日寄送此目標提醒</span></label><input id="goalEmailReminderTime" type="time" value="09:00" aria-label="目標提醒時間">';
+      content.appendChild(reminder);
       return;
     }
     const date = content.querySelector('input[type="date"]');
@@ -456,6 +578,8 @@
           deadline: content.querySelector("#goalDeadline")?.value || "",
           weeklyHours: hours,
           progress: 0,
+          emailReminderEnabled: content.querySelector("#goalEmailReminderEnabled")?.checked || false,
+          emailReminderTime: content.querySelector("#goalEmailReminderTime")?.value || "09:00",
         });
         renderData(result);
       }
@@ -513,9 +637,16 @@
   };
 
   window.saveSettings = async () => {
+    const preferences = readPreferencesFromForm();
+    if (preferences.dailyTaskEmailEnabled && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(preferences.gmailRecipient)) {
+      window.toast("請輸入有效的收件 Gmail 地址");
+      return;
+    }
     try {
-      renderData(await getStore().savePreferences(readPreferencesFromForm()));
-      window.toast("通知偏好已儲存至 Firestore");
+      renderData(await getStore().savePreferences(preferences));
+      window.toast(window.gmailReminderServiceReady
+        ? "通知設定已儲存，Gmail 提醒已同步"
+        : "通知設定已儲存；完成 Gmail 寄送服務設定後才會寄出");
     } catch (error) {
       showSaveError(error);
     }

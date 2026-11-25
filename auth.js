@@ -1,4 +1,4 @@
-import { firebaseConfig, firestoreDatabaseId } from "./firebase-config.js";
+import { firebaseConfig, firestoreDatabaseId, gmailReminderEndpoint } from "./firebase-config.js?v=2026-11-25-email2";
 
 const statusElement = document.getElementById("authStatus");
 const signInButton = document.getElementById("googleSignInButton");
@@ -174,7 +174,7 @@ if (!hasFirebaseConfig(firebaseConfig)) {
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js"),
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js"),
       import("https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js"),
-      import("./firestore-data.js?v=2026-11-23-1"),
+      import("./firestore-data.js?v=2026-11-25-email2"),
       import("./taiwan-market.js?v=2026-11-24-2"),
     ]);
   } catch (error) {
@@ -191,6 +191,41 @@ if (!hasFirebaseConfig(firebaseConfig)) {
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = firestoreSdk.getFirestore(app, firestoreDatabaseId);
+    window.setGmailReminderServiceStatus?.(gmailReminderEndpoint ? "Gmail 定時寄送服務已連接。" : "請先完成 Gmail 寄送服務設定；此處的時間設定會先儲存。", Boolean(gmailReminderEndpoint));
+    window.syncGmailReminders = async (state) => {
+      if (!gmailReminderEndpoint || !auth.currentUser) return;
+      try {
+        const currentUser = auth.currentUser;
+        const hasGoogleAccount = Boolean(currentUser.email && currentUser.emailVerified && currentUser.providerData?.some(({ providerId }) => providerId === "google.com"));
+        const dailyTaskEmailEnabled = hasGoogleAccount && Boolean(state.preferences?.dailyTaskEmailEnabled);
+        const emailReminderGoals = hasGoogleAccount ? state.goals.filter((goal) => goal.emailReminderEnabled) : [];
+        const idToken = await currentUser.getIdToken();
+        await fetch(gmailReminderEndpoint, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=UTF-8" },
+          body: JSON.stringify({
+            idToken,
+            preferences: {
+              gmailRecipient: hasGoogleAccount ? (currentUser.email || "") : "",
+              dailyTaskEmailEnabled,
+              dailyTaskEmailTime: state.preferences?.dailyTaskEmailTime || "08:00",
+            },
+            events: dailyTaskEmailEnabled ? state.events.map(({ id, title, date, startTime, done }) => ({ id, title, date, startTime, done })) : [],
+            goals: emailReminderGoals.map(({ id, title, deadline, progress, emailReminderEnabled, emailReminderTime }) => ({
+              id,
+              title,
+              deadline: deadline || "",
+              progress: Number(progress) || 0,
+              emailReminderEnabled: Boolean(emailReminderEnabled),
+              emailReminderTime: emailReminderTime || "09:00",
+            })),
+          }),
+        });
+      } catch (error) {
+        console.warn("Could not sync Gmail reminders.", error);
+      }
+    };
     const googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({ prompt: "select_account" });
     const lineProvider = new OAuthProvider("oidc.line");
@@ -224,6 +259,11 @@ if (!hasFirebaseConfig(firebaseConfig)) {
       window.firestoreStore = null;
       renderUser(null);
       setStatus("正在載入你的 Firestore 資料…");
+      window.setGmailReminderRecipientDefault?.(user.email || "");
+      window.setGmailReminderAccount?.({
+        email: user.email || "",
+        hasGoogleAccount: Boolean(user.email && user.emailVerified && user.providerData?.some(({ providerId }) => providerId === "google.com")),
+      });
       try {
         const store = createFirestoreStore({
           db,
@@ -233,6 +273,11 @@ if (!hasFirebaseConfig(firebaseConfig)) {
         const userData = await store.load(window.collectInitialFirestoreData);
         window.firestoreStore = store;
         window.renderFirestoreData(userData);
+        window.setGmailReminderRecipientDefault?.(user.email || "");
+        window.setGmailReminderAccount?.({
+          email: user.email || "",
+          hasGoogleAccount: Boolean(user.email && user.emailVerified && user.providerData?.some(({ providerId }) => providerId === "google.com")),
+        });
         renderUser(user);
         initTaiwanMarketBoard();
       } catch (error) {

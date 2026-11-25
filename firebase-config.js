@@ -10,3 +10,6 @@ export const firebaseConfig = {
 };
 
 export const firestoreDatabaseId = "daily-sequence";
+
+// Set this to the deployed Google Apps Script web app URL to enable scheduled Gmail reminders.
+export const gmailReminderEndpoint = "https://script.google.com/macros/s/AKfycbyi7UMJ1N_o4-ns-xb3KI_lVSQ8vf5XKaq1JQVGDFLRgb8bAfyhBRtNZ-lZCKGd20Wq/exec";

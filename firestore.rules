@@ -81,10 +81,12 @@ service cloud.firestore {
     function validGoal(data) {
       return hasFields(data, [
           'title', 'description', 'deadline', 'weeklyHours', 'progress',
+        'emailReminderEnabled', 'emailReminderTime',
           'createdAt', 'updatedAt'
         ]) &&
         onlyFields(data, [
           'title', 'description', 'deadline', 'weeklyHours', 'progress',
+        'emailReminderEnabled', 'emailReminderTime',
           'createdAt', 'updatedAt'
         ]) &&
         validText(data.title, 120) &&
@@ -92,6 +94,8 @@ service cloud.firestore {
         (data.deadline == '' || validDate(data.deadline)) &&
         data.weeklyHours is number && data.weeklyHours >= 0 && data.weeklyHours <= 168 &&
         data.progress is number && data.progress >= 0 && data.progress <= 100 &&
+        data.emailReminderEnabled is bool &&
+        validTime(data.emailReminderTime) &&
         data.createdAt is timestamp &&
         data.updatedAt == request.time;
     }
@@ -101,13 +105,15 @@ service cloud.firestore {
           'lineNotifications', 'notificationWindow', 'repeatReminderHours',
           'quietStart', 'quietEnd', 'resumeAfterQuiet', 'quickComplete',
           'allowSnooze', 'defaultSnooze', 'goalReviewFrequency',
-          'progressSuggestions', 'createdAt', 'updatedAt'
+          'progressSuggestions', 'gmailRecipient', 'dailyTaskEmailEnabled',
+          'dailyTaskEmailTime', 'createdAt', 'updatedAt'
         ]) &&
         onlyFields(data, [
           'lineNotifications', 'notificationWindow', 'repeatReminderHours',
           'quietStart', 'quietEnd', 'resumeAfterQuiet', 'quickComplete',
           'allowSnooze', 'defaultSnooze', 'goalReviewFrequency',
-          'progressSuggestions', 'createdAt', 'updatedAt'
+          'progressSuggestions', 'gmailRecipient', 'dailyTaskEmailEnabled',
+          'dailyTaskEmailTime', 'createdAt', 'updatedAt'
         ]) &&
         data.lineNotifications is bool &&
         data.notificationWindow in ['per_item', 'all_day', 'weekdays'] &&
@@ -120,6 +126,9 @@ service cloud.firestore {
         data.defaultSnooze in ['30m', '1h', 'tomorrow'] &&
         data.goalReviewFrequency in ['daily', 'weekly', 'monthly'] &&
         data.progressSuggestions is bool &&
+        validOptionalText(data.gmailRecipient, 254) &&
+        data.dailyTaskEmailEnabled is bool &&
+        validTime(data.dailyTaskEmailTime) &&
         data.createdAt is timestamp &&
         data.updatedAt == request.time;
     }

@@ -21,9 +21,23 @@ Firebase Web app 設定會出現在前端，因此不是私密憑證。請勿放
 
 ## Firestore 資料庫
 
-資料模型使用 Enterprise Native mode 資料庫 `daily-sequence`（`asia-east1`，台灣）。資料按 Firebase UID 分隔：`users/{uid}` 是不含個資的父文件，另有 `users/{uid}/events`、`users/{uid}/goals` 和 `users/{uid}/settings/preferences`。首次登入會把頁面上的範例行程與目標，以及通知偏好，匯入該帳號；後續新增、完成、調整或刪除都會寫入 Firestore。
+資料模型使用 Enterprise Native mode 資料庫 `daily-sequence`（`asia-east1`，台灣）。資料按 Firebase UID 分隔：`users/{uid}` 是不含個資的父文件，另有 `users/{uid}/events`、`users/{uid}/goals` 和 `users/{uid}/settings/preferences`。新帳號的行程與長期目標從空白開始；舊版 `demo-event-*` 和 `demo-goal-*` 範例文件會在該帳號下次登入時移除。新增、完成、調整或刪除都會寫入該 UID 專屬的 Firestore 路徑。
 
-此工作區未安裝 Firebase CLI，所以資料庫尚未建立或部署。請先在 Firebase Console 建立 **Enterprise → Firestore Native mode** 資料庫，ID 設為 `daily-sequence`、位置設為 `asia-east1`，選 **Production mode**。若已安裝並登入 Firebase CLI，再於專案目錄執行：
+## Gmail 每日提醒
+
+前端可設定每日待辦寄送時間，也可為每個長期目標各自設定每日提醒時間。網站關閉時仍要寄信，需要一個持續執行的排程；`email-reminders/Code.gs` 使用 Google Apps Script，信件由部署者的 Google 帳號寄出。腳本每分鐘檢查一次，時區為台北；Apps Script 時間觸發器可能有少量延遲，並受 Google 每日寄信額度限制。Apps Script 通常不另收主機費，但仍適用 Google 額度；Firebase 費用則依目前專案方案與用量計算。
+
+啟用寄信前需完成下列設定：
+
+1. 在 `script.google.com` 建立 Apps Script 專案，貼入 `email-reminders/Code.gs`，並啟用 `email-reminders/appsscript.json` manifest。
+2. 在專案 Script Properties 新增 `FIREBASE_API_KEY`，值取自 `firebase-config.js` 的公開 Web API key。
+3. 將專案時區設為 `Asia/Taipei`，執行一次 `setupEmailReminderTrigger()`，並授權 Apps Script 寄送郵件與建立時間觸發器。
+4. 部署為 Web app，執行身分選「我」，存取權選「任何人」。首次執行時需授權 Apps Script 建立觸發器、驗證 Firebase 登入，以及從你的 Gmail 寄信。端點會驗證 Firebase ID token，並只接受寄給登入且已驗證 Google 帳號信箱的資料。
+5. 將部署取得的 Web app URL 設定到 `firebase-config.js` 的 `gmailReminderEndpoint`，再推送網站更新。
+
+排程只會寄送當日尚未完成的行程/代辦；長期目標則依每個目標各自設定的時間提醒。只有開啟提醒的待辦或目標會同步至 Apps Script 專案的 Script Properties，並由該專案寄至登入 Google 帳號的信箱；停用所有提醒時，腳本會刪除該帳號的排程資料。尚未設定 `gmailReminderEndpoint` 時，網頁只會儲存提醒偏好，不會寄出郵件。
+
+目前 Firebase 專案使用 **Enterprise Native mode** 資料庫 `daily-sequence`（`asia-east1`）；資料庫與 Firestore 規則已在 Firebase Console 設定。若日後需要更新規則，且已安裝並登入 Firebase CLI，可在專案目錄執行：
 
 ```bash
 firebase login

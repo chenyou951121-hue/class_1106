@@ -27,15 +27,36 @@ export function createFirestoreStore({ db, firestore, uid }) {
     );
     const snapshot = await getDocs(collectionQuery);
     let documents = snapshot.docs;
-    if (name === "events") {
-      const demoEvents = documents.filter(({ id }) => /^demo-event-\d+$/.test(id));
-      await Promise.all(demoEvents.map((document) => deleteDoc(document.ref)));
-      documents = documents.filter(({ id }) => !/^demo-event-\d+$/.test(id));
+    const demoPattern = name === "events" ? /^demo-event-\d+$/ : name === "goals" ? /^demo-goal-\d+$/ : null;
+    if (demoPattern) {
+      const demoDocuments = documents.filter(({ id }) => demoPattern.test(id));
+      await Promise.all(demoDocuments.map((document) => deleteDoc(document.ref)));
+      documents = documents.filter(({ id }) => !demoPattern.test(id));
+    }
+    if (name === "goals") {
+      const goalsWithoutReminderFields = documents.filter((document) => {
+        const data = document.data();
+        return data.emailReminderEnabled === undefined || data.emailReminderTime === undefined;
+      });
+      await Promise.all(goalsWithoutReminderFields.map((document) => updateDoc(document.ref, {
+        emailReminderEnabled: false,
+        emailReminderTime: "09:00",
+        updatedAt: serverTimestamp(),
+      })));
     }
     return documents.map((document) => ({
       id: document.id,
       ...document.data(),
+      ...(name === "goals" ? {
+        emailReminderEnabled: document.data().emailReminderEnabled ?? false,
+        emailReminderTime: document.data().emailReminderTime ?? "09:00",
+      } : {}),
     }));
+  }
+
+  async function syncReminders() {
+    if (typeof window.syncGmailReminders !== "function") return;
+    await window.syncGmailReminders(state);
   }
 
   async function seedOnce(initialData) {
@@ -101,6 +122,7 @@ export function createFirestoreStore({ db, firestore, uid }) {
       goals,
       preferences: preferencesSnapshot.data(),
     };
+    await syncReminders();
     return state;
   }
 
@@ -111,6 +133,7 @@ export function createFirestoreStore({ db, firestore, uid }) {
       updatedAt: serverTimestamp(),
     });
     state.events.push({ ...data, id: ref.id });
+    await syncReminders();
     return state;
   }
 
@@ -120,12 +143,14 @@ export function createFirestoreStore({ db, firestore, uid }) {
       updatedAt: serverTimestamp(),
     });
     state.events = state.events.map((item) => item.id === id ? { ...item, ...patch } : item);
+    await syncReminders();
     return state;
   }
 
   async function removeEvent(id) {
     await deleteDoc(doc(db, collectionPath("events"), id));
     state.events = state.events.filter((item) => item.id !== id);
+    await syncReminders();
     return state;
   }
 
@@ -136,6 +161,7 @@ export function createFirestoreStore({ db, firestore, uid }) {
       updatedAt: serverTimestamp(),
     });
     state.goals.push({ ...data, id: ref.id });
+    await syncReminders();
     return state;
   }
 
@@ -145,12 +171,14 @@ export function createFirestoreStore({ db, firestore, uid }) {
       updatedAt: serverTimestamp(),
     });
     state.goals = state.goals.map((item) => item.id === id ? { ...item, ...patch } : item);
+    await syncReminders();
     return state;
   }
 
   async function removeGoal(id) {
     await deleteDoc(doc(db, collectionPath("goals"), id));
     state.goals = state.goals.filter((item) => item.id !== id);
+    await syncReminders();
     return state;
   }
 
@@ -160,6 +188,7 @@ export function createFirestoreStore({ db, firestore, uid }) {
       updatedAt: serverTimestamp(),
     });
     state.preferences = { ...state.preferences, ...preferences };
+    await syncReminders();
     return state;
   }
 
